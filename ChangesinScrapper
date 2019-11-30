@@ -1,0 +1,239 @@
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.IO.Compression;
+using System.IO;
+using System.Text;
+using System.Reflection;
+using NPOI.XSSF.UserModel;
+using System.Data;
+using NPOI.HSSF.UserModel;
+using Microsoft.Office.Interop.Excel;
+//CSV filecheckr,Excel Filechecker
+
+namespace WindowsFormsApplication1
+{
+    public partial class Form1 : Form
+    {
+        String Filename;
+        String ofd;
+        String OriginalFileName;
+        string extractpath = ConfigurationManager.AppSettings.Get("ExtractPath");
+        String Concatpathcsv = ConfigurationManager.AppSettings.Get("DestPathCSV");
+        String Concatpathxls = ConfigurationManager.AppSettings.Get("DestPathXLSX");
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openfile = new OpenFileDialog();
+            openfile.ShowDialog();
+            openfile.Title = "Browse files now";
+            openfile.DefaultExt = ".rar";
+            openfile.CheckPathExists = true;
+            openfile.CheckFileExists = true;
+            
+            Filename= openfile.FileName;
+            ofd = System.IO.Path.GetFileName(Filename);
+            OriginalFileName = Path.GetFileNameWithoutExtension(Filename);
+            textBox1.Text = Filename;
+            processor(Filename);
+           
+        }
+
+
+        public void processor(String Filename)
+        {
+
+            if(ofd.Contains(".zip"))
+            {
+                MessageBox.Show("Zip file");
+                String result = Filename;
+                MessageBox.Show(result);
+                progressBar1.Minimum = 0;
+                progressBar1.Maximum = 100;
+                ZipFile.ExtractToDirectory(Filename, extractpath);
+                for (int i = 0; i <= 100; i++)
+                {
+                    progressBar1.Value = i;
+                }
+                MessageBox.Show("Extraction Completed");
+                string folderpath = extractpath + "\\" + OriginalFileName;
+                concatenator(Filename);
+            }
+            if(ofd.Contains(".rar"))
+            {
+                MessageBox.Show("We don't support RAR this moment.Please upload zip for time being");
+                 
+            }
+           
+        }
+        public void concatenator(string FileName)
+        {
+            ofd.Replace(".zip", "");
+            MessageBox.Show(OriginalFileName);
+            string folderpath = extractpath + "\\" +OriginalFileName;
+            MessageBox.Show(folderpath);
+            string[] filepaths = Directory.GetFiles(folderpath);
+            
+            
+            int i;
+
+            if (filepaths[0].Contains(".csv"))
+                {
+                    StreamWriter fileDest = new StreamWriter(Concatpathcsv, true);
+                    for (i = 0; i < filepaths.Length; i++)
+                    {
+                        string file = filepaths[i];
+                    string[] lines = File.ReadAllLines(file);
+                    if (i > 0)
+                    {
+                        lines = lines.Skip(1).ToArray();
+                    }
+                    foreach (string line in lines)
+                    {
+                        fileDest.WriteLine(line);
+                    }
+                }
+                    fileDest.Close();
+            } 
+            MessageBox.Show("Done");
+
+            if(filepaths[0].Contains(".xlsx"))
+            {
+                Microsoft.Office.Interop.Excel._Application xl = new Microsoft.Office.Interop.Excel.Application();
+
+                MessageBox.Show("xls loop");
+                int numColumns = 2;     // according to your sample
+                List<string[]> contents = new List<string[]>();
+                string[] record = new string[2];
+                for (i = 0; i < filepaths.Length; i++)
+                {
+                    Microsoft.Office.Interop.Excel.Workbook workbook = xl.Workbooks.Open(filepaths[i]);
+                    Microsoft.Office.Interop.Excel.Worksheet sheet = workbook.Sheets[1];
+
+                    int numRows = sheet.UsedRange.Rows.Count;
+                    for (int rowIndex = 1; rowIndex <= numRows; rowIndex++)  // assuming the data starts at 1,1
+                    {
+                        for (int colIndex = 1; colIndex <= numColumns; colIndex++)
+                        {
+                            Range cell = (Range)sheet.Cells[rowIndex, colIndex];
+                            if (cell.Value != null)
+                            {
+                                record[colIndex - 1] = Convert.ToString(cell.Value);
+                            }
+                        }
+                        contents.Add(record);
+                        
+                    }
+                }
+                System.Data.DataTable dt = ConvertListToDataTable(contents);
+                DataGridView d=new DataGridView();
+                d.DataSource=dt;
+
+              
+
+                if(d.Rows.Count>0){
+                    try{
+                        System.Data.DataTable dt1=new System.Data.DataTable();
+                        foreach(DataGridViewColumn col in d.Columns)
+                        {
+                            dt1.Columns.Add(col.HeaderText,col.ValueType);
+                        }
+                        int count=0;
+                        foreach(DataGridViewRow row in d.Rows)
+                        {
+                            if(count<d.Rows.Count-1)
+                            {
+                                dt1.Rows.Add();
+                                foreach (DataGridViewCell cell in row.Cells)
+                                {
+                                    dt1.Rows[dt1.Rows.Count-1][cell.ColumnIndex]=cell.Value.ToString();
+                                }
+                            }
+                            count++;
+                        }
+                        StreamWriter wr=new StreamWriter(@"D:\scrapy\biostats.xlsx");
+                        for (int itr=0;itr<dt1.Columns.Count;itr++)
+                        {
+                            wr.Write(dt1.Columns[itr].ToString().ToUpper()+"\t");
+                        }
+                        wr.WriteLine();
+                         //write rows to excel file
+                    for (int it = 0; it < (dt1.Rows.Count); it++)
+                    {
+                        for (int j = 0; j < dt1.Columns.Count; j++)
+                        {
+                            if (dt1.Rows[it][j] != null)
+                            {
+                                wr.Write(Convert.ToString(dt1.Rows[it][j]) + "\t");
+                            }
+                            else
+                            {
+                                wr.Write("\t");
+                            }
+                        }
+                        wr.WriteLine();
+                    }
+                    wr.Close();
+                     MessageBox.Show("Export Done");
+                    }
+                    catch(Exception e)
+                    {
+                        throw (e);
+                    }
+                }
+            }
+
+        }
+         static System.Data.DataTable ConvertListToDataTable(List<string[]> list)
+        {
+            System.Data.DataTable table = new System.Data.DataTable();
+            int columns = 0;
+             foreach(var array in list)
+             {
+                 if(array.Length>columns)
+                 {
+                     columns = array.Length;
+                 }
+             }
+             for (int i = 0; i < columns;i++ )
+             {
+                 table.Columns.Add();
+             }
+             foreach(var array in list)
+             {
+                 table.Rows.Add(array);
+             }
+                 return table;
+        }
+        private void progressBar1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            this.Close();
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+
+        }  
+    }
+}
